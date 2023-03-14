@@ -67,11 +67,11 @@ class print_tweet extends Actor {
 object distribution {
   def poisson_distribution(i: Double): Int = {
     val limit: Double = Math.exp(-i)
-    var prod: Double = nextDouble()
+    var p: Double = nextDouble()
     var n: Int = 0
-    while(prod >= limit) {
+    while(p >= limit) {
       n = n+1
-      prod = prod * nextDouble()
+      p = p * nextDouble()
     }
     return n
   }
