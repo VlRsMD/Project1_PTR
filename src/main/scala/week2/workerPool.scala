@@ -25,9 +25,9 @@ class poolSupervisor extends Actor with ActorLogging {
   def receive = {
     case m: String => {
       printer1 ! m
-    }
-    case 0 => {
-      printer1 ! PoisonPill
+      if (m== " panic") {
+        printer1 ! PoisonPill
+      }
     }
     case Terminated(printer1) => {
       val newPrinter1 = ActorSystem().actorOf(Props(new Printer))
@@ -96,10 +96,13 @@ class readTweets1 extends Actor {
       val tweetsListB: ListBuffer[String] = new ListBuffer[String]
       val split1 = tweets.text().split(":")
       for (i<-0 to split1.length-1) {
-        // println(spl1(i))
-        if (split1(i).contains("text") && split1(i+1).contains("source") && i < split1.length-1){
+        if (split1(i).contains("text") && split1(i+1).contains("source") && i < split1.length-1 || split1(i).contains("panic} event")){
           val s2 = split1(i+1).split("\"")
           tweetsListB += s2(1)
+        }
+        if(split1(i).contains("panic} event")) {
+          val s2 = split1(i).split("}")
+          tweetsListB += s2(0)
         }
       }
       val tweetsList = tweetsListB.toList
