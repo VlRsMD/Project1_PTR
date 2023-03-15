@@ -13,6 +13,7 @@ class readTweets1 extends Actor {
   def receive = {
     case "Start" => {
       var tweets: Document = Jsoup.connect("http://localhost:4000//tweets/1").get();
+      val printerActor = ActorSystem().actorOf(Props(new printTweet))
       val tweetsListB: ListBuffer[String] = new ListBuffer[String]
       val split1 = tweets.text().split(":")
       for (i<-0 to split1.length-1) {
@@ -24,7 +25,6 @@ class readTweets1 extends Actor {
       }
       val tweetsList = tweetsListB.toList
       for (k<-0 to tweetsList.length-1) {
-        val printerActor = ActorSystem().actorOf(Props(new printTweet))
         printerActor ! tweetsList(k)
       }
     }
