@@ -4,7 +4,6 @@ import akka.actor.SupervisorStrategy.Restart
 import akka.actor.{Actor, ActorLogging, ActorSystem, OneForOneStrategy, PoisonPill, Props, Terminated}
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
-
 import scala.collection.mutable.{ListBuffer, Stack}
 import scala.util.Random.nextDouble
 
