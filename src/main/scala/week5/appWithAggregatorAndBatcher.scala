@@ -351,8 +351,6 @@ class aggregatorActor2 extends Actor {
 }
 
 class Batcher extends Actor {
-  override def preStart(): Unit = {
-  }
   def receive = {
     case list: List[String] => {
       for (i<-list.indices) {
