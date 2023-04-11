@@ -7,7 +7,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import requests.Response
 import scala.collection.mutable
-import scala.collection.mutable.{ListBuffer, Stack}
+import scala.collection.mutable.ListBuffer
 import scala.util.Random.nextDouble
 
 class appImplementation {
@@ -17,7 +17,7 @@ class appImplementation {
 class reader1 extends Actor {
   def receive = {
     case "Start" => {
-      var tweets: Document = Jsoup.connect("http://localhost:4000//tweets/1").get();
+      var tweets: Document = Jsoup.connect("http://localhost:4000//tweets/1").get()
       val mediatorActor = ActorSystem().actorOf(Props(new mediator_actor))
       val tweetsListB: ListBuffer[String] = new ListBuffer[String]
       val split1 = tweets.text().split("event: \"message\"")
@@ -33,7 +33,7 @@ class reader1 extends Actor {
 class reader2 extends Actor {
   def receive = {
     case "Start" => {
-      var tweets: Document = Jsoup.connect("http://localhost:4000//tweets/2").get();
+      var tweets: Document = Jsoup.connect("http://localhost:4000//tweets/2").get()
       val mediatorActor = ActorSystem().actorOf(Props(new mediator_actor))
       val tweetsListB: ListBuffer[String] = new ListBuffer[String]
       val split1 = tweets.text().split("event: \"message\"")
@@ -49,7 +49,7 @@ class reader2 extends Actor {
 class mediator_actor extends Actor {
   def receive = {
     case list: List[String] => {
-      val engagementRatioA = ActorSystem().actorOf(Props(new engagementRatioActor))
+      val engagementRatioPool = context.actorOf(Props[engagementRatioActor].withRouter(RoundRobinPool(3)))
       val st :mutable.Stack[String] = new mutable.Stack[String]()
       for (i<-list.indices) {
         st.push(list(i))
@@ -60,7 +60,7 @@ class mediator_actor extends Actor {
       }
       for (k<-st_inverse.indices) {
         var tweet: String = st_inverse.pop()
-        engagementRatioA ! tweet
+        engagementRatioPool ! tweet
       }
     }
   }
@@ -70,7 +70,7 @@ class engagementRatioActor extends Actor {
   def receive = {
     case m: String => {
       val tweetInfoListB: ListBuffer[String] = new ListBuffer[String]
-      val sentimentActor = ActorSystem().actorOf(Props(new sentimentScoreActor))
+      val sentimentScorePool = context.actorOf(Props[sentimentScoreActor].withRouter(RoundRobinPool(3)))
       if (m.contains("\"favourites_count\"") && m.contains("\"followers_count\"") && m.contains("\"retweet_count\"")) {
         val split = m.split(":")
         var tweet: String = ""
@@ -97,9 +97,7 @@ class engagementRatioActor extends Actor {
             retweetCount = s3(0).toDouble
           }
         }
-
         engagementRatio = (favouritesCount + retweetCount) / followersCount
-
         val splitText = m.split("\"text\":\"")
         val splitTweet = splitText(1).split("\",\"source\":")
         val s3 = splitTweet(0).split(" ")
@@ -119,7 +117,7 @@ class engagementRatioActor extends Actor {
         tweetInfoListB += tweet
         tweetInfoListB += engagementRatio.toString
         val tweetInfoList = tweetInfoListB.toList
-        sentimentActor ! tweetInfoList
+        sentimentScorePool ! tweetInfoList
       } else if(m.contains("{\"message\": panic}")) {
         val split1 = m.split(":")
         val split2 = split1(2).split(" ")
@@ -127,7 +125,7 @@ class engagementRatioActor extends Actor {
         val panicMessage = split3(0)
         tweetInfoListB += panicMessage
         val tweetInfoList = tweetInfoListB.toList
-        sentimentActor ! tweetInfoList
+        sentimentScorePool ! tweetInfoList
       }
     }
   }
@@ -162,8 +160,8 @@ class sentimentScoreActor extends Actor {
         tweetsInfoListB += list(1)
         tweetsInfoListB += sentimentScore.toString
         val tweetsInfoList = tweetsInfoListB.toList
-        val taskManagerActor = ActorSystem().actorOf(Props(new task_manager))
-        taskManagerActor ! tweetsInfoList
+        val taskManagerPool = context.actorOf(Props[task_manager].withRouter(RoundRobinPool(3)))
+        taskManagerPool ! tweetsInfoList
       }
     }
   }
@@ -172,14 +170,14 @@ class sentimentScoreActor extends Actor {
 class task_manager extends Actor {
   def receive = {
     case list: List[String] => {
-      val workerPools = context.actorOf(Props[worker_pool].withRouter(RoundRobinPool(3)), name = "WorkerPools")
+      val workerPools = context.actorOf(Props[worker_pool].withRouter(RoundRobinPool(3)), name = "worker_pools")
       var sleepTime: Int = PoissonDistribution.distribution(50)
-      Thread.sleep(sleepTime)
       var sleepT = Integer.toString(sleepTime)
       val newListB: ListBuffer[String] = new ListBuffer[String]
       if(list.head.equals("panic")) {
         newListB += list.head
         val newList = newListB.toList
+        Thread.sleep(sleepTime)
         workerPools ! newList
       } else {
         newListB += list.head
@@ -187,6 +185,7 @@ class task_manager extends Actor {
         newListB += list(2)
         newListB += sleepT
         val newList = newListB.toList
+        Thread.sleep(sleepTime)
         workerPools ! newList
       }
     }
