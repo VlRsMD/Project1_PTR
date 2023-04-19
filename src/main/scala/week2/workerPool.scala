@@ -87,7 +87,7 @@ object poisson_distribution {
   }
 }
 
-class readTweets1 extends Actor {
+class readTweets_1 extends Actor {
   def receive = {
     case "Start" => {
       var tweets: Document = Jsoup.connect("http://localhost:4000//tweets/1").get();
@@ -110,7 +110,7 @@ class readTweets1 extends Actor {
   }
 }
 
-class readTweets2 extends Actor {
+class readTweets_2 extends Actor {
   def receive = {
     case "Start" => {
       var tweets: Document = Jsoup.connect("http://localhost:4000//tweets/2").get();
@@ -132,8 +132,8 @@ class readTweets2 extends Actor {
 
 object worker extends App {
   val system = ActorSystem()
-  val reader1Actor = system.actorOf(Props(new readTweets1))
-  val reader2Actor = system.actorOf(Props(new readTweets2))
+  val reader1Actor = system.actorOf(Props(new readTweets_1))
+  val reader2Actor = system.actorOf(Props(new readTweets_2))
   reader1Actor ! "Start"
   reader2Actor ! "Start"
 }
