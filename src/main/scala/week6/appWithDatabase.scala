@@ -1,4 +1,4 @@
-package week5
+package week6
 
 import akka.actor.SupervisorStrategy.Restart
 import akka.actor.{Actor, ActorLogging, ActorSystem, OneForOneStrategy, PoisonPill, Props, Terminated}
@@ -12,17 +12,18 @@ import scala.collection.mutable.ListBuffer
 import scala.util.Random.nextDouble
 import com.typesafe.config.ConfigFactory
 
-import java.sql.{Connection, DriverManager, PreparedStatement}
+import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet}
+import java.util.UUID
 
-class appWithAggregatorAndBatcher {
+class appWithDatabase {
 
 }
 
-class tweetsReaderNr1 extends Actor {
+class tweetsReader_1 extends Actor {
   def receive = {
     case "Start" => {
       var tweets: Document = Jsoup.connect("http://localhost:4000//tweets/1").get()
-      val mediatorActor = ActorSystem().actorOf(Props(new tweetsMediator))
+      val mediatorActor = ActorSystem().actorOf(Props(new tweets_mediator))
       val tweetsListB: ListBuffer[String] = new ListBuffer[String]
       val split1 = tweets.text().split("event: \"message\"")
       for (i<-0 until split1.length) {
@@ -34,11 +35,11 @@ class tweetsReaderNr1 extends Actor {
   }
 }
 
-class tweetsReaderNr2 extends Actor {
+class tweetsReader_2 extends Actor {
   def receive = {
     case "Start" => {
       var tweets: Document = Jsoup.connect("http://localhost:4000//tweets/2").get()
-      val mediatorActor = ActorSystem().actorOf(Props(new tweetsMediator))
+      val mediatorActor = ActorSystem().actorOf(Props(new tweets_mediator))
       val tweetsListB: ListBuffer[String] = new ListBuffer[String]
       val split1 = tweets.text().split("event: \"message\"")
       for (i<-0 until split1.length) {
@@ -50,14 +51,14 @@ class tweetsReaderNr2 extends Actor {
   }
 }
 
-class tweetsMediator extends Actor {
+class tweets_mediator extends Actor {
   def receive = {
     case list: List[String] => {
-      val panic = ActorSystem().actorOf(Props(new panicActor))
-      val retweetedTweet = ActorSystem().actorOf(Props(new retweetedTweetActor))
-      val tweetTextPool = context.actorOf(Props[tweetTextActor].withRouter(RoundRobinPool(3)))
-      val engagementRatioPool = context.actorOf(Props[sentimentScoreCalculator].withRouter(RoundRobinPool(3)))
-      val sentimentScorePool = context.actorOf(Props[engagementRatioCalculator].withRouter(RoundRobinPool(3)))
+      val panic = ActorSystem().actorOf(Props(new panicMessageActor))
+      val retweetedTweet = ActorSystem().actorOf(Props(new retweeted_tweet_actor))
+      val tweetTextPool = context.actorOf(Props[tweet_text_actor].withRouter(RoundRobinPool(3)))
+      val engagementRatioPool = context.actorOf(Props[sentimentScoreCalculatorActor].withRouter(RoundRobinPool(3)))
+      val sentimentScorePool = context.actorOf(Props[engagementRatioCalculatorActor].withRouter(RoundRobinPool(3)))
       val st :mutable.Stack[String] = new mutable.Stack[String]()
       for (i<-list.indices) {
         st.push(list(i))
@@ -78,10 +79,10 @@ class tweetsMediator extends Actor {
   }
 }
 
-class panicActor extends Actor {
+class panicMessageActor extends Actor {
   def receive = {
     case m: String => {
-      val workerActor = ActorSystem().actorOf(Props(new workerPoolActor))
+      val workerActor = ActorSystem().actorOf(Props(new worker_pool_actor))
       if(m.contains("{\"message\": panic}")) {
         val split1 = m.split(":")
         val split2 = split1(2).split(" ")
@@ -93,18 +94,18 @@ class panicActor extends Actor {
   }
 }
 
-class retweetedTweetActor extends Actor {
+class retweeted_tweet_actor extends Actor {
   def receive = {
     case m: String => {
-      val retweetedTweetBatcher = ActorSystem().actorOf(Props(new retweetBatcher))
+      val retweetedTweetBatcher = ActorSystem().actorOf(Props(new retweetActor))
       if(m.contains("\"retweeted_status\":")) {
         val initialSplit = m.split("\"retweeted_status\":")
         val splitData = initialSplit(1).split("\"text\":\"")
         val splitTweet = splitData(1).split("\",\"source\":")
         val s3 = splitTweet(0).split(" ")
         for (m<-0 until s3.length) {
-          for (k<-dictionaryOfBadWords.bad_words().indices) {
-            if (s3(m)==dictionaryOfBadWords.bad_words()(k)) {
+          for (k<-collectionOfBadWords.bad_words().indices) {
+            if (s3(m)==collectionOfBadWords.bad_words()(k)) {
               val s4 = s3(m).split("")
               for (l<-0 to s4.length-1) {
                 s4(l) = "\u001B[31m"+"*"+ "\u001B[0m"
@@ -121,7 +122,7 @@ class retweetedTweetActor extends Actor {
   }
 }
 
-class retweetBatcher extends Actor {
+class retweetActor extends Actor {
   def receive = {
     case m: String => {
       val retweetedTweetInfoListB: ListBuffer[String] = new ListBuffer[String]
@@ -136,18 +137,18 @@ class retweetBatcher extends Actor {
   }
 }
 
-class tweetTextActor extends Actor {
+class tweet_text_actor extends Actor {
   def receive = {
     case m: String => {
       val tweetTextInfoListB: ListBuffer[String] = new ListBuffer[String]
-      val taskManager = context.actorOf(Props[taskManagerActor].withRouter(RoundRobinPool(5)))
+      val taskManager = context.actorOf(Props[task_manager_actor].withRouter(RoundRobinPool(5)))
       if (m.contains("\"favourites_count\"") && m.contains("\"followers_count\"") && m.contains("\"retweet_count\"")) {
         val splitData = m.split("\"text\":\"")
         val splitTweet = splitData(1).split("\",\"source\":")
         val s3 = splitTweet(0).split(" ")
         for (m<-0 until s3.length) {
-          for (k<-dictionaryOfBadWords.bad_words().indices) {
-            if (s3(m)==dictionaryOfBadWords.bad_words()(k)) {
+          for (k<-collectionOfBadWords.bad_words().indices) {
+            if (s3(m)==collectionOfBadWords.bad_words()(k)) {
               val s4 = s3(m).split("")
               for (l<-0 to s4.length-1) {
                 s4(l) = "\u001B[31m"+"*"+ "\u001B[0m"
@@ -171,11 +172,11 @@ class tweetTextActor extends Actor {
   }
 }
 
-class engagementRatioCalculator extends Actor {
+class engagementRatioCalculatorActor extends Actor {
   def receive = {
     case m: String => {
       val engagementRatioInfoListB: ListBuffer[String] = new ListBuffer[String]
-      val taskManager = context.actorOf(Props[taskManagerActor].withRouter(RoundRobinPool(5)))
+      val taskManager = context.actorOf(Props[task_manager_actor].withRouter(RoundRobinPool(5)))
       if (m.contains("\"favourites_count\"") && m.contains("\"followers_count\"") && m.contains("\"retweet_count\"")) {
         val split = m.split(":")
         var tweet: String = ""
@@ -217,18 +218,18 @@ class engagementRatioCalculator extends Actor {
 }
 
 
-class sentimentScoreCalculator extends Actor {
+class sentimentScoreCalculatorActor extends Actor {
   def receive = {
     case m: String => {
       val sentimentScoreInfoListB: ListBuffer[String] = new ListBuffer[String]
-      val taskManager = context.actorOf(Props[taskManagerActor].withRouter(RoundRobinPool(5)))
+      val taskManager = context.actorOf(Props[task_manager_actor].withRouter(RoundRobinPool(5)))
       if (m.contains("\"favourites_count\"") && m.contains("\"followers_count\"") && m.contains("\"retweet_count\"")) {
         val splitData = m.split("\"text\":\"")
         val splitTweet = splitData(1).split("\",\"source\":")
         val s3 = splitTweet(0).split(" ")
         for (m<-0 until s3.length) {
-          for (k<-dictionaryOfBadWords.bad_words().indices) {
-            if (s3(m)==dictionaryOfBadWords.bad_words()(k)) {
+          for (k<-collectionOfBadWords.bad_words().indices) {
+            if (s3(m)==collectionOfBadWords.bad_words()(k)) {
               val s4 = s3(m).split("")
               for (l<-0 to s4.length-1) {
                 s4(l) = "\u001B[31m"+"*"+ "\u001B[0m"
@@ -241,7 +242,7 @@ class sentimentScoreCalculator extends Actor {
         val tweet = splitTweet(0)
         var sentimentScore: Double = 0;
         var emotionsSum: Int = 0;
-        val emotionValues = emotions.getEmotionValues()
+        val emotionValues = emotionCollection.getEmotionValues()
         val split = tweet.split(" ")
         for (i <- split.indices) {
           for (j <- emotionValues.indices) {
@@ -265,11 +266,11 @@ class sentimentScoreCalculator extends Actor {
   }
 }
 
-class taskManagerActor extends Actor {
+class task_manager_actor extends Actor {
   def receive = {
     case list: List[String] => {
-      val workerPools = context.actorOf(Props[workerPoolActor].withRouter(RoundRobinPool(3)), name = "worker_pools")
-      var sleepTime: Int = poissonDistributionClass.distribution(50)
+      val workerPools = context.actorOf(Props[worker_pool_actor].withRouter(RoundRobinPool(3)), name = "worker_pools")
+      var sleepTime: Int = poisson_distribution_class.distribution(50)
       var sleepT = Integer.toString(sleepTime)
       val newListB: ListBuffer[String] = new ListBuffer[String]
       newListB += list.head
@@ -283,19 +284,19 @@ class taskManagerActor extends Actor {
   }
 }
 
-class workerPoolActor extends Actor with ActorLogging {
+class worker_pool_actor extends Actor with ActorLogging {
   override val supervisorStrategy = OneForOneStrategy(maxNrOfRetries = 2) {
     case _ => log.info("A printer actor has been killed"); Restart
   }
-  val aggregatorActor = ActorSystem().actorOf(Props(new aggregatorActor))
+  val aggregatorActor = ActorSystem().actorOf(Props(new aggregator))
   context.watch(aggregatorActor)
   def receive = {
     case "panic" => {
-        aggregatorActor ! PoisonPill
+      aggregatorActor ! PoisonPill
     }
     case list: List[String] => {
       if (list(3).toInt < 37) {
-        val workerActors = context.actorOf(Props[aggregatorActor].withRouter(RoundRobinPool(7)), name = "WorkerActors")
+        val workerActors = context.actorOf(Props[aggregator].withRouter(RoundRobinPool(7)), name = "WorkerActors")
         context.watch(workerActors)
         val newListB: ListBuffer[String] = new ListBuffer[String]
         newListB += list.head
@@ -305,7 +306,7 @@ class workerPoolActor extends Actor with ActorLogging {
         workerActors ! newList
       }
       if (list(3).toInt >= 37 && list(3).toInt < 44) {
-        val workerActors = context.actorOf(Props[aggregatorActor].withRouter(RoundRobinPool(5)), name = "WorkerActors")
+        val workerActors = context.actorOf(Props[aggregator].withRouter(RoundRobinPool(5)), name = "WorkerActors")
         context.watch(workerActors)
         val newListB: ListBuffer[String] = new ListBuffer[String]
         newListB += list.head
@@ -315,7 +316,7 @@ class workerPoolActor extends Actor with ActorLogging {
         workerActors ! newList
       }
       if (list(3).toInt >= 44 && list(3).toInt < 57) {
-        val workerActors = context.actorOf(Props[aggregatorActor].withRouter(RoundRobinPool(3)), name = "WorkerActors")
+        val workerActors = context.actorOf(Props[aggregator].withRouter(RoundRobinPool(3)), name = "WorkerActors")
         context.watch(workerActors)
         val newListB: ListBuffer[String] = new ListBuffer[String]
         newListB += list.head
@@ -325,7 +326,7 @@ class workerPoolActor extends Actor with ActorLogging {
         workerActors ! newList
       }
       if (list(3).toInt >= 57) {
-        val workerActors = context.actorOf(Props[aggregatorActor].withRouter(RoundRobinPool(2)), name = "WorkerActors")
+        val workerActors = context.actorOf(Props[aggregator].withRouter(RoundRobinPool(2)), name = "WorkerActors")
         context.watch(workerActors)
         val newListB: ListBuffer[String] = new ListBuffer[String]
         newListB += list.head
@@ -336,14 +337,14 @@ class workerPoolActor extends Actor with ActorLogging {
       }
     }
     case Terminated(workerActors) => {
-      val newAggregator = ActorSystem().actorOf(Props(new aggregatorActor))
+      val newAggregator = ActorSystem().actorOf(Props(new aggregator))
       println("\u001B[32m"+"The aggregator actor has been restarted."+ "\u001B[0m")
       println
     }
   }
 }
 
-class aggregatorActor extends Actor {
+class aggregator extends Actor {
   lazy val akkaSystemConfiguration = ConfigFactory.parseString(
     """
       |akka.actor.bounded-mailbox {
@@ -353,23 +354,23 @@ class aggregatorActor extends Actor {
       |}
         """.stripMargin)
   val system = ActorSystem("System", akkaSystemConfiguration)
-  val batcher = system.actorOf(Props[batcher].withMailbox("akka.actor.bounded-mailbox"))
+  val batcher = system.actorOf(Props[batcherActor].withMailbox("akka.actor.bounded-mailbox"))
   def receive = {
     case list: List[String] => {
       if(list.head.equals("Tweet Text")) {
-        tweetsApp.tweetTextsListB += list
+        tweets_app.tweetTextsListB += list
       }
       if(list.head.equals("Engagement Ratio")) {
-        tweetsApp.engagementRatioListB += list
+        tweets_app.engagementRatioListB += list
       }
       if(list.head.equals("Sentiment Score")) {
-        tweetsApp.sentimentScoreListB += list
+        tweets_app.sentimentScoreListB += list
       }
     }
   }
-  val tweetTextsList = tweetsApp.tweetTextsListB.toList
-  val engagementRatioList = tweetsApp.engagementRatioListB.toList
-  val sentimentScoreList = tweetsApp.sentimentScoreListB.toList
+  val tweetTextsList = tweets_app.tweetTextsListB.toList
+  val engagementRatioList = tweets_app.engagementRatioListB.toList
+  val sentimentScoreList = tweets_app.sentimentScoreListB.toList
   val allListsB :ListBuffer[List[List[String]]] = new ListBuffer[List[List[String]]]
   allListsB += tweetTextsList
   allListsB += engagementRatioList
@@ -378,65 +379,34 @@ class aggregatorActor extends Actor {
   batcher ! allLists
 }
 
-class batcher extends Actor {
+class batcherActor extends Actor {
   def receive = {
     case list: List[List[List[String]]] => {
       val tweetTextList = list.head
       val engagementRatioList = list(1)
       val sentimentScoreList = list(2)
-      val tweetInfoListB :ListBuffer[List[String]] = new ListBuffer[List[String]]
-      val time0 = System.nanoTime()
-      val timeout = (poissonDistributionClass.distribution(100)*0.001).toInt
       for (i<-0 until tweetTextList.length) {
         for (j<-0 until engagementRatioList.length) {
           for (k<-0 until sentimentScoreList.length) {
             if(sentimentScoreList(k)(2).equals(engagementRatioList(j)(2)) && sentimentScoreList(k)(2).equals(tweetTextList(i)(2)) && engagementRatioList(j)(2).equals(tweetTextList(i)(2))) {
               val infoListB: ListBuffer[String] = new ListBuffer[String]
-              infoListB += "\u001B[33m" + "Tweet Information: " + "\u001B[0m"
-              val interval1 = ((System.nanoTime()-time0)/1e9d).toInt
-              if(interval1 >= timeout) {
-                val infoList = infoListB.toList
-                for (i<-infoList.indices) {
-                  println(infoList(i))
-                }
-                println("-----")
-              }
-              infoListB += "Tweet text: " + "\"" + tweetTextList(i)(1) + "\""
-              val interval2 = ((System.nanoTime()-time0)/1e9d).toInt
-              if(interval2 >= timeout) {
-                val infoList = infoListB.toList
-                for (i<-infoList.indices) {
-                  println(infoList(i))
-                }
-                println("-----")
-              }
-              infoListB += "Engagement ratio: " + engagementRatioList(j)(1)
-              val interval3 = ((System.nanoTime()-time0)/1e9d).toInt
-              if(interval3 >= timeout) {
-                val infoList = infoListB.toList
-                for (i<-infoList.indices) {
-                  println(infoList(i))
-                }
-                println("-----")
-              }
-              infoListB += "Sentiment score: " + sentimentScoreList(k)(1)
-              tweetInfoListB += infoListB.toList
+              infoListB += tweetTextList(i)(1)
+              infoListB += engagementRatioList(j)(1)
+              infoListB += sentimentScoreList(k)(1)
+              val infoList = infoListB.toList
+              val randomUserID: String = UUID.randomUUID.toString
+              val randomTweetsInfoID: String = UUID.randomUUID.toString
+              databaseActions.addToUserTable(randomUserID)
+              databaseActions.addToTweetsTable(randomTweetsInfoID, randomUserID, infoList.head, infoList(1), infoList(2))
             }
           }
         }
-      }
-      val tweetInfoList = tweetInfoListB.toList
-      for (i<-0 until tweetInfoList.length) {
-        for (j<-0 until tweetInfoList(i).length) {
-          println(tweetInfoList(i)(j))
-        }
-        println("-----")
       }
     }
   }
 }
 
-object poissonDistributionClass {
+object poisson_distribution_class {
   def distribution(i: Double): Int = {
     val limit: Double = Math.exp(-i)
     var p: Double = nextDouble()
@@ -449,7 +419,7 @@ object poissonDistributionClass {
   }
 }
 
-object emotions {
+object emotionCollection {
   def getEmotionValues(): List[List[String]] = {
     val emotionsListB: ListBuffer[List[String]] = new ListBuffer[List[String]]
     var resp: Response = requests.get("http://localhost:4000/emotion_values")
@@ -516,7 +486,7 @@ object emotions {
   }
 }
 
-object dictionaryOfBadWords {
+object collectionOfBadWords {
   def bad_words(): List[String] = {
     val badWordsListB: ListBuffer[String] = new ListBuffer[String]
     badWordsListB += "shit"
@@ -536,15 +506,79 @@ object dictionaryOfBadWords {
   }
 }
 
-object tweetsApp extends App {
+object databaseActions {
+  def getConnection(): Connection = {
+    var url: String = "jdbc:sqlite:tweetsDB.sqlite"
+    var conn: Connection = null
+    try {
+      Class.forName("org.sqlite.JDBC")
+      conn = DriverManager.getConnection(url)
+    } catch {
+      case e: Exception => e.printStackTrace
+    }
+    return conn
+  }
+  def addToUserTable(id: String): Unit = {
+    try {
+      var conn: Connection = getConnection()
+      var sql: String = "SELECT id FROM user WHERE id = ?"
+      var pstmt: PreparedStatement = conn.prepareStatement(sql);
+      pstmt.setString(1, id);
+      var res: ResultSet = pstmt.executeQuery();
+      var presence: Boolean = res.next();
+      if(!presence) {
+        var sqlQuery: String = "INSERT INTO user(id) VALUES(?)"
+        var pstmt1: PreparedStatement = conn.prepareStatement(sqlQuery)
+        pstmt1.setString(1, id)
+        var exec = pstmt1.executeUpdate()
+        pstmt.close()
+        pstmt1.close()
+        conn.close()
+      } else {
+        pstmt.close()
+        conn.close()
+      }
+    } catch {
+      case e: Exception => e.printStackTrace
+    }
+  }
+  def addToTweetsTable(id: String, userID: String, tweet: String, engagementRatio: String, sentimentScore: String): Unit = {
+    try {
+      var conn: Connection = getConnection()
+      var sql: String = "SELECT id FROM tweets WHERE tweet = ?"
+      var pstmt: PreparedStatement = conn.prepareStatement(sql);
+      pstmt.setString(1, tweet);
+      var res: ResultSet = pstmt.executeQuery();
+      var presence: Boolean = res.next();
+      if(!presence) {
+        var sqlQuery: String = "INSERT INTO tweets(id, user_id, tweet, engagement_ratio, sentiment) VALUES(?, ?, ?, ?, ?)"
+        var pstmt1: PreparedStatement = conn.prepareStatement(sqlQuery)
+        pstmt1.setString(1, id)
+        pstmt1.setString(2, userID)
+        pstmt1.setString(3, tweet)
+        pstmt1.setString(4, engagementRatio)
+        pstmt1.setString(5, sentimentScore)
+        var exec = pstmt.executeUpdate()
+        pstmt.close()
+        pstmt1.close()
+        conn.close()
+      } else {
+        pstmt.close()
+        conn.close()
+      }
+    } catch {
+      case e: Exception => e.printStackTrace
+    }
+  }
+}
+
+object tweets_app extends App {
   val system = ActorSystem()
-  val reader1Actor = system.actorOf(Props(new tweetsReaderNr1))
-  val reader2Actor = system.actorOf(Props(new tweetsReaderNr2))
+  val reader1Actor = system.actorOf(Props(new tweetsReader_1))
+  val reader2Actor = system.actorOf(Props(new tweetsReader_2))
   val tweetTextsListB :ListBuffer[List[String]] = new ListBuffer[List[String]]
   val engagementRatioListB :ListBuffer[List[String]] = new ListBuffer[List[String]]
   val sentimentScoreListB :ListBuffer[List[String]] = new ListBuffer[List[String]]
   reader1Actor ! "Start"
   reader2Actor ! "Start"
 }
-
-

@@ -71,7 +71,7 @@ class engagementRatioActor extends Actor {
     case m: String => {
       val tweetInfoListB: ListBuffer[String] = new ListBuffer[String]
       val sentimentScorePool = context.actorOf(Props[sentimentScoreActor].withRouter(RoundRobinPool(3)))
-      if (m.contains("\"favourites_count\"") && m.contains("\"followers_count\"") && m.contains("\"retweet_count\"")) {
+      if (m.contains("\"favourites_count\"") && m.contains("\"followers_count\"") && m.contains("\"retweet_count\"") && m.contains("\"name\":\"")) {
         val split = m.split(":")
         var tweet: String = ""
         var favouritesCount: Double = 0
@@ -114,6 +114,10 @@ class engagementRatioActor extends Actor {
         }
         splitTweet(0) = s3.mkString(" ")
         tweet = splitTweet(0)
+        val split1 = m.split("\"name\":\"")
+        val split2 = split1(1).split("\",\"created_at\"")
+        val name = split2(0)
+        tweetInfoListB += name
         tweetInfoListB += tweet
         tweetInfoListB += engagementRatio.toString
         val tweetInfoList = tweetInfoListB.toList
@@ -142,7 +146,7 @@ class sentimentScoreActor extends Actor {
         val tweetsInfoList = tweetsInfoListB.toList
         val taskManagerActor = ActorSystem().actorOf(Props(new task_manager))
         taskManagerActor ! tweetsInfoList
-      } else if (list.length == 2) {
+      } else if (list.length == 3) {
         var sentimentScore: Double = 0;
         var emotionsSum: Int = 0;
         val emotions = emotionValues.getEmotionValues()
@@ -158,6 +162,7 @@ class sentimentScoreActor extends Actor {
         }
         tweetsInfoListB += list.head
         tweetsInfoListB += list(1)
+        tweetsInfoListB += list(2)
         tweetsInfoListB += sentimentScore.toString
         val tweetsInfoList = tweetsInfoListB.toList
         val taskManagerPool = context.actorOf(Props[task_manager].withRouter(RoundRobinPool(3)))
@@ -183,6 +188,7 @@ class task_manager extends Actor {
         newListB += list.head
         newListB += list(1)
         newListB += list(2)
+        newListB += list(3)
         newListB += sleepT
         val newList = newListB.toList
         Thread.sleep(sleepTime)
@@ -205,40 +211,44 @@ class worker_pool extends Actor with ActorLogging {
         if (message == "panic") {
           workerActors ! PoisonPill
         }
-      } else if (list(3).toInt < 37) {
+      } else if (list(4).toInt < 37) {
         val workerActors = context.actorOf(Props[printer_actor].withRouter(RoundRobinPool(7)), name = "WorkerActors")
         context.watch(workerActors)
         val newListB: ListBuffer[String] = new ListBuffer[String]
-        newListB += "Tweet: " + "\"" + list.head + "\""
-        newListB += "Engagement Ratio: " + list(1)
-        newListB += "Sentiment Score: " + list(2)
+        newListB += "User name: " + list.head
+        newListB += "Tweet: " + "\"" + list(1) + "\""
+        newListB += "Engagement Ratio: " + list(2)
+        newListB += "Sentiment Score: " + list(3)
         val newList = newListB.toList
         workerActors ! newList
-      } else if (list(3).toInt >= 37 && list(3).toInt < 44) {
+      } else if (list(4).toInt >= 37 && list(4).toInt < 44) {
         val workerActors = context.actorOf(Props[printer_actor].withRouter(RoundRobinPool(5)), name = "WorkerActors")
         context.watch(workerActors)
         val newListB: ListBuffer[String] = new ListBuffer[String]
-        newListB += "Tweet: " + "\"" + list.head + "\""
-        newListB += "Engagement Ratio: " + list(1)
-        newListB += "Sentiment Score: " + list(2)
+        newListB += "User name: " + list.head
+        newListB += "Tweet: " + "\"" + list(1) + "\""
+        newListB += "Engagement Ratio: " + list(2)
+        newListB += "Sentiment Score: " + list(3)
         val newList = newListB.toList
         workerActors ! newList
-      } else if (list(3).toInt >= 44 && list(3).toInt < 57) {
+      } else if (list(4).toInt >= 44 && list(4).toInt < 57) {
         val workerActors = context.actorOf(Props[printer_actor].withRouter(RoundRobinPool(3)), name = "WorkerActors")
         context.watch(workerActors)
         val newListB: ListBuffer[String] = new ListBuffer[String]
-        newListB += "Tweet: " + "\"" + list.head + "\""
-        newListB += "Engagement Ratio: " + list(1)
-        newListB += "Sentiment Score: " + list(2)
+        newListB += "User name: " + list.head
+        newListB += "Tweet: " + "\"" + list(1) + "\""
+        newListB += "Engagement Ratio: " + list(2)
+        newListB += "Sentiment Score: " + list(3)
         val newList = newListB.toList
         workerActors ! newList
-      } else if (list(3).toInt >= 57) {
+      } else if (list(4).toInt >= 57) {
         val workerActors = context.actorOf(Props[printer_actor].withRouter(RoundRobinPool(2)), name = "WorkerActors")
         context.watch(workerActors)
         val newListB: ListBuffer[String] = new ListBuffer[String]
-        newListB += "Tweet: " + "\"" + list.head + "\""
-        newListB += "Engagement Ratio: " + list(1)
-        newListB += "Sentiment Score: " + list(2)
+        newListB += "User name: " + list.head
+        newListB += "Tweet: " + "\"" + list(1) + "\""
+        newListB += "Engagement Ratio: " + list(2)
+        newListB += "Sentiment Score: " + list(3)
         val newList = newListB.toList
         workerActors ! newList
       }

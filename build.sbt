@@ -11,6 +11,9 @@ libraryDependencies += "com.lihaoyi" %% "requests" % "0.8.0"
 libraryDependencies += "org.jsoup" % "jsoup" % "1.15.4"
 
 libraryDependencies += "com.typesafe.akka" %% "akka-http" % "10.5.0"
+libraryDependencies += "com.typesafe.akka" %% "akka-stream" % "2.7.0"
+
+libraryDependencies += "org.xerial" % "sqlite-jdbc" % "3.41.2.1"
 
 // libraryDependencies += "org.json4s" %% "json4s-core" % "4.0.6"
 
